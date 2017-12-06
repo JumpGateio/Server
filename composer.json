@@ -1,0 +1,23 @@
+{
+	"name": "jumpgate/commands",
+	"description": "Server commands",
+	"keywords": ["laravel", "jumpgate"],
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Brandon Hyde",
+			"email": "hyde.brandon@gmail.com"
+		}
+	],
+	"autoload": {
+		"classmap": ["src"]
+	},
+	"require": {
+		"guzzlehttp/guzzle": "~5.0",
+		"symfony/console": "~2.6",
+		"symfony/process": "~2.6"
+	},
+	"bin": [
+		"commands"
+	]
+}
