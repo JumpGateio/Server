@@ -4,20 +4,20 @@ This package contains helpful commands created for managing the Nuka Code server
 
 Install
 -------
-THIS DOES NOT WORK RIGHT NOW
-Run the following composer command to install the JumpGate installer globally.
+Run the following composer command to install Jumpgate Commands globally.
 
-    composer global require "jumpgate/server-commands=~1.0"
+    composer global require jumpgate/commands
 
 Make sure to place the ``~/.composer/vendor/bin`` directory in your PATH so the laravel executable can be located by your system.
 
     echo 'export PATH="$HOME/.composer/vendor/bin:$PATH"' >> ~/.bash_profile
     source ~/.bash_profile
 
-Usage
+New Site Command
 -----
-Once installed, the simple server-command new command will create a fresh Laravel installation in the directory you specify.
-For instance, laravel new blog would create a directory named blog containing a fresh Laravel installation with all dependencies installed.
-This method of installation is much faster than installing via Composer:
+The new command will create an Nginx config in ``~/nginx/sites-avaiable`` and then sym link it to the sites enable directory.
+After this is done it will create a directory for the domain in ``~/sites``. Once this is complete it will restart Nginx using ``sudo service nginx reload``.
 
-    server-command new site your.domain.com
+For best results make sure to allow the command ``service nginx reload`` via your sudo configuration.
+
+    commands new-site sub.domain.com
