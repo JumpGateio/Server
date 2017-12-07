@@ -6,7 +6,7 @@ Install
 -------
 Run the following composer command to install Jumpgate Commands globally.
 
-    composer global require jumpgate/commands
+    composer global require jumpgate/server
 
 Make sure to place the ``~/.composer/vendor/bin`` directory in your PATH so the laravel executable can be located by your system.
 
@@ -20,4 +20,4 @@ After this is done it will create a directory for the domain in ``~/sites``. Onc
 
 For best results make sure to allow the command ``service nginx reload`` via your sudo configuration.
 
-    commands new-site sub.domain.com
+    server new-site sub.domain.com

@@ -8,6 +8,6 @@ if(file_exists(__DIR__.'/../../autoload.php')) {
 }
 
 $app = new Symfony\Component\Console\Application('JumpGate Server Commander', '1.0');
-$app->add(new JumpGate\Commands\Console\NewSiteCommand);
+$app->add(new JumpGate\Server\Console\NewSiteCommand);
 
 $app->run();

@@ -1,7 +1,7 @@
 {
-	"name": "jumpgate/commands",
+	"name": "jumpgate/server",
 	"description": "Server commands",
-	"keywords": ["laravel", "jumpgate"],
+	"keywords": ["symfony", "jumpgate"],
 	"license": "MIT",
 	"authors": [
 		{
@@ -18,6 +18,6 @@
 
 	},
 	"bin": [
-		"commands"
+		"server"
 	]
 }

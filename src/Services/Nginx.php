@@ -1,6 +1,6 @@
 <?php
 
-namespace JumpGate\Commands\Console\Services;
+namespace JumpGate\Server\Console\Services;
 
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Filesystem\Exception\IOExceptionInterface;

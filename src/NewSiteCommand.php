@@ -1,8 +1,8 @@
 <?php
 
-namespace JumpGate\Commands\Console;
+namespace JumpGate\Server\Console;
 
-use JumpGate\Commands\Console\Services\Nginx;
+use JumpGate\Server\Console\Services\Nginx;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
@@ -55,7 +55,7 @@ class NewSiteCommand extends Command {
     /**
      * Execute the command.
      *
-     * @param  InputInterface  $input The input instance.
+     * @param  InputInterface  $input  The input instance.
      * @param  OutputInterface $output The output instance.
      *
      * @return void
