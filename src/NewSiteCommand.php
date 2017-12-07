@@ -2,29 +2,43 @@
 
 namespace JumpGate\Commands\Console;
 
-ini_set('memory_limit', '1G');
-
-use GuzzleHttp\Client;
-use GuzzleHttp\Event\ProgressEvent;
+use JumpGate\Commands\Console\Services\Nginx;
 use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\Console\Question\ChoiceQuestion;
-use Symfony\Component\Process\Process;
-use ZipArchive;
+use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
+use Symfony\Component\Filesystem\Filesystem;
 
+/**
+ * Class NewSiteCommand
+ *
+ * This command will create an nginx config for a new site.
+ * You must have the ability to run 'service nginx configtest|reload'.
+ *
+ * @package JumpGate\Commands\Console
+ */
 class NewSiteCommand extends Command {
+
+    /**
+     * @var The input instance.
+     */
     private $input;
 
+    /**
+     * @var The output instance.
+     */
     private $output;
 
-    private $directory;
+    /**
+     * @var array The site paths.
+     */
+    private $paths = [];
 
-    private $zipFile;
-
-    private $progress = 0;
+    /**
+     * @var The filesystem instance.
+     */
+    private $fileSystem;
 
     /**
      * Configure the command options.
@@ -41,13 +55,15 @@ class NewSiteCommand extends Command {
     /**
      * Execute the command.
      *
-     * @param  InputInterface  $input
-     * @param  OutputInterface $output
+     * @param  InputInterface  $input The input instance.
+     * @param  OutputInterface $output The output instance.
      *
      * @return void
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $output->writeln('<info>Creating a new site just for you!</info>');
+
         $this->input  = $input;
         $this->output = $output;
 
@@ -55,332 +71,130 @@ class NewSiteCommand extends Command {
 
         // Make sure the domain name conforms to sub.domain.tld
         // With is to make sure we don't break the nginx config
-        if (!$this->validateDomainName($domain)) {
-            $this->output->writeln('<error>Invalid domain name. It must conform to sub.domain.tld</error>');
+        $this->validateDomainName($domain);
 
-            exit(1);
-        }
+        // Build up all the paths we will need to create a new site
+        $this->buildPaths($domain);
 
-        $siteDirectory = $this->getSiteDirectory($domain);
-//        $nginxConfig   = $this->buildNginxConfig($domain, $siteDirectory);
+        // Make sure all the paths we need exists.
+        $this->validatePaths();
 
+        // Setup Nginx
+        $nginx = new Nginx($this->paths, $domain, $this->output);
 
-        $this->output->writeln(getenv("HOME"));
+        // Setup filesystem
+        $this->fileSystem = new Filesystem();
 
+        // Run config test first to make sure the system is not broken to begin with.
+        $nginx->configTest();
 
-        // create sites directory
-        // Validate domain
-        // create domain config
-        // symlink config
-        // reload nginx config
+        // Build the configuration file from a template.
+        $configurationFile = $nginx->buildConfig();
 
+        // Write the configuration file to disk.
+        $nginx->writeConfig($configurationFile);
 
-        exit();
+        // Create a symlink in the site-enabled directory so nginx will see the config file.
+        $nginx->enableConfig();
 
-        $helper   = $this->getHelper('question');
-        $question = new ChoiceQuestion('Select a Customer:', [1 => 'Re-Rentals', 2 => 'Cast Locations', 3 => 'Beth Tezedec']);
+        // Test the config to make sure there are no issues.
+        $nginx->configTest();
 
-        $customer = $helper->ask($input, $output, $question);
+        // Reload nginx configs.
+        $nginx->reload();
 
-        $question = new ChoiceQuestion('Select a Server', [1 => 'Staging', 2 => 'Production']);
+        $output->writeln('<comment>Your new site has been created. Make sure to update your DNS.</comment>');
 
-        $server = $helper->ask($input, $output, $question);
-
-        exit($customer . ' ' . $server);
-
-
-        $this->directory = getcwd() . '/' . $input->getArgument('name');
-        $this->zipFile   = $this->makeFilename();
-
-        $output->writeln('<info>Crafting JumpGate application...</info>');
-
-        $this->verifyApplicationDoesntExist();
-
-        $this->download();
-
-        $this->extract();
-
-        $output->writeln('<comment>Application ready! Build something amazing.</comment>');
-
-
+        exit(0);
     }
 
     /**
      * Validate a domain name to make sure it wont break Nginx
      *
      * @param $domain The domain to validate
-     *
-     * @return bool If valid return true otherwise return false
      */
     protected function validateDomainName($domain)
     {
-        if (preg_match('/^[a-z0-9][a-z0-9\-]+[a-z0-9](\.[a-z]{2,5})+$/i', $domain)) {
-            return true;
+        if (!preg_match('/^[a-z0-9][a-z0-9\-]+[a-z0-9](\.[a-z]{2,5})+$/i', $domain)) {
+            $this->output->writeln('<error>Invalid domain name. The domain must conform to sub.domain.tld</error>');
+            exit(1);
         }
-
-        return false;
     }
 
     /**
-     * Get the path for the sites directory and then find or create the folder for the domain.
+     * Build up all the paths we will need to create a new site
      *
-     * @param $domain The domain for the site we are adding to the server.
-     *
-     * @return string The path of our domain directory.
+     * @param $domain The domain of the site we are adding to the server
      */
-    protected function getSiteDirectory($domain)
+    private function buildPaths($domain)
     {
-        $basePath   = getenv("HOME");
-        $sitesPath  = $basePath . '/sites/';
-        $domainPath = $sitesPath . $domain;
+        // TODO: Should we turn this into a class?
+        $this->paths['base']          = getenv("HOME") . '/';
+        $this->paths['site']          = $this->paths['base'] . 'sites/';
+        $this->paths['domain']        = $this->paths['site'] . $domain;
+        $this->paths['nginx']['base'] = $this->paths['base'] . 'nginx/';
 
-        // Home directory (/home/username) not found
-        if (!is_dir($basePath)) {
-            $this->output->writeln('<error>Unable to find home folder: ' . $basePath . '.</error>');
+        $this->paths['nginx']['sites-available'] = $this->paths['nginx']['base'] . 'sites-available/';
+        $this->paths['nginx']['sites-enabled']   = $this->paths['nginx']['base'] . 'sites-enabled/';
+        $this->paths['nginx']['config']          = $this->paths['nginx']['sites-available'] . $domain;
+        $this->paths['nginx']['symlink']         = $this->paths['nginx']['sites-enabled'] . $domain;
+    }
 
-            exit(1);
-        }
+    /**
+     * Check if the folders needed for nginx exist.
+     */
+    protected function validatePaths()
+    {
+        // Check if the home directory exists
+        // /home/USERNAME
+        $this->findOrCreateDirectory($this->paths['base'], false);
 
-        // Sites directory (/home/username/sites) not found
-        if (!is_dir($sitesPath)) {
-            $this->output->writeln('<error>Unable to find sites folder in ' . $basePath . '.</error>');
+        // Check if the sites directory exists. If not create it.
+        // /home/USERNAME/sites
+        $this->findOrCreateDirectory($this->paths['site']);
 
-            exit(1);
-        }
+        // Check if the domain directory exists. If not create it.
+        // /home/USERNAME/sites/DOMAIN
+        $this->findOrCreateDirectory($this->paths['domain']);
 
-        // If the site directory does not exist create it.
-        if (!is_dir($domainPath)) {
-            mkdir($domainPath, 0775);
+        // Check if the nginx directory exists. If not create it.
+        // /home/USERNAME/nginx
+        $this->findOrCreateDirectory($this->paths['nginx']['base']);
 
-            // Unable to create sites folder for domain.
-            if (!is_dir($domainPath)) {
-                $this->output->writeln('<error>Unable to create folder: ' . $domainPath . '.</error>');
+        // Check if the sites-available directory exists. If not create it.
+        // /home/USERNAME/nginx/sites-available
+        $this->findOrCreateDirectory($this->paths['nginx']['sites-available']);
+
+        // Check if the sites-enabled directory exists. If not create it.
+        // /home/USERNAME/nginx/sites-enabled
+        $this->findOrCreateDirectory($this->paths['nginx']['sites-enabled']);
+    }
+
+    /**
+     * Check if a directory exists. If not create it if create directory is set to true;
+     *
+     * @param      $path            The path we are checking.
+     * @param bool $createDirectory Should we create the directory if it does not exists
+     */
+    private function findOrCreateDirectory($path, $createDirectory = true)
+    {
+        if (!$this->fileSystem->is_dir($path)) {
+            if ($createDirectory) {
+                $this->output->writeln("<info>Folder not found. Attempting to create: {$path}</info>");
+
+                try {
+                    $this->fileSystem->mkdir($path, 0775);
+                } catch (IOExceptionInterface $e) {
+                    $this->output->writeln("<error>Unable to create folder: {$path}</error>");
+                    $this->output->writeln("<info>Error: {$e->getMessage()}</info>");
+
+                    exit(1);
+                }
+            } else {
+                $this->output->writeln("<error>Unable to find folder: {$path}.</error>");
 
                 exit(1);
             }
         }
-
-        // Return the site directory
-        return $domainPath;
-    }
-
-    protected function buildNginxConfig($domain)
-    {
-
-    }
-
-    protected function getNginxConfigTemplate()
-    {
-
-    }
-
-    protected function writeNginxConfig($config, $path)
-    {
-
-    }
-
-    protected function enableNginxSite()
-    {
-
-    }
-
-    /**
-     * Generate a random temporary filename.
-     *
-     * @return string
-     */
-    protected function makeFilename()
-    {
-        if ($this->input->getOption('slim')) {
-            return dirname(__FILE__) . '/jumpGate_slim.zip';
-        }
-
-        return dirname(__FILE__) . '/jumpGate_full.zip';
-    }
-
-    /**
-     * Verify that the application does not already exist.
-     *
-     * @return void
-     */
-    protected function verifyApplicationDoesntExist()
-    {
-        $this->output->writeln('<info>Checking application path for existing site...</info>');
-
-        if (is_dir($this->directory)) {
-            $this->output->writeln('<error>Application already exists!</error>');
-
-            exit(1);
-        }
-
-        $this->output->writeln('<info>Check complete...</info>');
-    }
-
-    /**
-     * Download the temporary Zip to the given file.
-     *
-     * @return $this
-     */
-    protected function download()
-    {
-        $buildUrl = $this->getBuildFileLocation();
-
-        if ($this->input->getOption('force')) {
-            $this->output->writeln('<info>--force command given. Deleting old build files...</info>');
-
-            $this->cleanUp();
-
-            $this->output->writeln('<info>complete...</info>');
-        }
-
-        if ($this->checkIfServerHasNewerBuild()) {
-            $this->cleanUp();
-            $this->downloadFileWithProgressBar($buildUrl);
-        }
-
-        return $this;
-    }
-
-    /**
-     * Get the build file location based on the flags passed in.
-     *
-     * @return string
-     */
-    protected function getBuildFileLocation()
-    {
-        if ($this->input->getOption('slim')) {
-            return 'http://builds.nukacode.com/slimSrb/latest.zip';
-        }
-
-        return 'http://builds.nukacode.com/fullSrb/latest.zip';
-    }
-
-    /**
-     * Clean-up the Zip file.
-     *
-     * @return $this
-     */
-    protected function cleanUp()
-    {
-        @chmod($this->zipFile, 0777);
-        @unlink($this->zipFile);
-
-        return $this;
-    }
-
-    /**
-     * Check if the server has a newer version of the nukacode build.
-     *
-     * @return bool
-     */
-    protected function checkIfServerHasNewerBuild()
-    {
-        if (file_exists($this->zipFile)) {
-            $client   = new Client();
-            $response = $client->get('http://builds.nukacode.com/files.php');
-
-            // The downloaded copy is the same as the one on the server.
-            if (in_array(md5_file($this->zipFile), $response->json())) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Download the nukacode build files and display progress bar.
-     *
-     * @param $buildUrl
-     */
-    protected function downloadFileWithProgressBar($buildUrl)
-    {
-        $this->output->writeln('<info>Begin file download...</info>');
-
-        $progressBar = new ProgressBar($this->output, 100);
-        $progressBar->start();
-
-        $client  = new Client();
-        $request = $client->createRequest('GET', $buildUrl);
-        $request->getEmitter()->on('progress', function (ProgressEvent $e) use ($progressBar) {
-            if ($e->downloaded > 0) {
-                $localProgress = floor(($e->downloaded / $e->downloadSize * 100));
-
-                if ($localProgress != $this->progress) {
-                    $this->progress = (integer)$localProgress;
-                    $progressBar->advance();
-                }
-            }
-        });
-
-        $response = $client->send($request);
-
-        $progressBar->finish();
-
-        file_put_contents($this->zipFile, $response->getBody());
-
-        $this->output->writeln("\n<info>File download complete...</info>");
-    }
-
-    /**
-     * Extract the zip file into the given directory.
-     *
-     *
-     * @return $this
-     */
-    protected function extract()
-    {
-        $this->output->writeln('<info>Extracting files...</info>');
-
-        $archive = new ZipArchive;
-
-        $archive->open($this->zipFile);
-
-        $archive->extractTo($this->directory);
-
-        $archive->close();
-
-        $this->output->writeln('<info>Extracting complete...</info>');
-
-        return $this;
-    }
-
-    /**
-     * Run post install composer commands
-     *
-     * @return void
-     */
-    protected function runComposerCommands()
-    {
-        $this->output->writeln('<info>Running post install scripts...</info>');
-
-        $composer = $this->findComposer();
-
-        $commands = [
-            $composer . ' run-script post-install-cmd',
-            $composer . ' run-script post-create-project-cmd',
-        ];
-
-        $process = new Process(implode(' && ', $commands), $this->directory, null, null, null);
-
-        $process->run(function ($type, $line) {
-            $this->output->write($line);
-        });
-
-        $this->output->writeln('<info>Scripts complete...</info>');
-    }
-
-    /**
-     * Get the composer command for the environment.
-     *
-     * @return string
-     */
-    protected function findComposer()
-    {
-        if (file_exists(getcwd() . '/composer.phar')) {
-            return '"' . PHP_BINARY . '" composer.phar';
-        }
-
-        return 'composer';
     }
 }
