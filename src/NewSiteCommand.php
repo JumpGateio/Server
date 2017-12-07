@@ -62,7 +62,7 @@ class NewSiteCommand extends Command {
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $output->writeln('<info>Creating a new site just for you!</info>');
+        $output->writeln('<comment>Creating a new site just for you!</comment>');
 
         $this->input  = $input;
         $this->output = $output;
@@ -86,21 +86,27 @@ class NewSiteCommand extends Command {
         $nginx = new Nginx($this->paths, $domain, $this->output);
 
         // Run config test first to make sure the system is not broken to begin with.
+        $output->writeln('<comment>Testing Nginx config before we start.</comment>');
         $nginx->configTest();
 
         // Build the configuration file from a template.
+        $output->writeln('<comment>Building your configuration file.</comment>');
         $configurationFile = $nginx->buildConfig();
 
         // Write the configuration file to disk.
+        $output->writeln('<comment>Writing your configuration file to disk.</comment>');
         $nginx->writeConfig($configurationFile);
 
         // Create a symlink in the site-enabled directory so nginx will see the config file.
+        $output->writeln('<comment>Creating a symlink to enable the site.</comment>');
         $nginx->enableConfig();
 
         // Test the config to make sure there are no issues.
+        $output->writeln('<comment>Testing the config to make sure we didnt break anything.</comment>');
         $nginx->configTest();
 
         // Reload nginx configs.
+        $output->writeln('<comment>Reloading Nginx configs</comment>');
         $nginx->reload();
 
         $output->writeln('<comment>Your new site has been created. Make sure to update your DNS.</comment>');
