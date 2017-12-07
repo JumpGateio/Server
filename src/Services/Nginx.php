@@ -138,7 +138,7 @@ class Nginx {
     {
         $configTest = system('sudo service nginx configtest');
 
-        if (!strstr($configTest, '...fail!')) {
+        if (!strstr($configTest, '...done')) {
             $this->output->writeln('<error>There was something wrong with the nginx config! Reverting changes.</error>');
             $this->output->writeln("Debug: {$configTest}");
 
