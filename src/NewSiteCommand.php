@@ -115,7 +115,10 @@ class NewSiteCommand extends Command {
      */
     protected function validateDomainName($domain)
     {
-        if (!preg_match('/^[a-z0-9][a-z0-9\-]+[a-z0-9](\.[a-z]{2,5})+$/i', $domain)) {
+        if (!preg_match(
+            '/^(([a-zA-Z]{1})|([a-zA-Z]{1}[a-zA-Z]{1})|([a-zA-Z]{1}[0-9]{1})|([0-9]{1}[a-zA-Z]{1})|([a-zA-Z0-9][a-zA-Z0-9-_]{1,61}[a-zA-Z0-9]))\.([a-zA-Z]{2,6}|[a-zA-Z0-9-]{2,30}\.[a-zA-Z]{2,3})$/m',
+            $domain
+        )) {
             $this->output->writeln('<error>Invalid domain name. The domain must conform to sub.domain.tld</error>');
             exit(1);
         }
