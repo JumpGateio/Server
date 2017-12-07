@@ -82,7 +82,7 @@ class Nginx {
     {
         try {
             // Create the configuration file.
-            $this->fileSystem->dumpFile($this->paths['nginx']['sites-available'], $configurationFile);
+            $this->fileSystem->dumpFile($this->paths['nginx']['config'], $configurationFile);
         } catch (IOExceptionInterface $exception) {
             $this->output->writeln('<error>Unable to create the configuration file.</error>');
 
