@@ -3,7 +3,7 @@ return 'server {
     listen 80;
     listen [::]:80;
 
-    root {SITE_PATH};
+    root {SITE_PATH}/public;
     index index.php index.html index.htm;
 
     server_name www.{DOMAIN} {DOMAIN};
