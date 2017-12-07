@@ -92,19 +92,20 @@ class Nginx {
     }
 
     /**
-     * Run the nginx config test command to make sure the next config we
-     * just created does not contain any errors.
-     *
-     * If this fails we will roll back config changes.
+     * Create a symlink between the sites-available and sites-enabled config so that Nginx will see the config file.
      */
-    public function configTest()
+    public function enableConfig()
     {
-        $configTest = system('service nginx configtest');
+        try {
+            // Create the symlink
+            $symLink = $this->fileSystem->symlink(
+                $this->paths['nginx']['config'],
+                $this->paths['nginx']['symlink']
+            );
+        } catch (IOExceptionInterface $exception) {
+            $this->output->writeln('<error>There was an error creating the symlink from sites-available to sites-enabled</error>');
 
-        if (!strstr($configTest, '[ OK ]')) {
-            $this->output->writeln('<error>There was something wrong with the nginx config! Reverting changes.</error>');
-            $this->output->writeln("Debug: {$configTest}");
-
+            // There was a problem with the config symlink so remove our changes.
             $this->rollbackChanges();
         }
     }
@@ -128,13 +129,31 @@ class Nginx {
     }
 
     /**
+     * Run the nginx config test command to make sure the next config we
+     * just created does not contain any errors.
+     *
+     * If this fails we will roll back config changes.
+     */
+    public function configTest()
+    {
+        $configTest = system('sudo service nginx configtest');
+
+        if (!strstr($configTest, '[ OK ]')) {
+            $this->output->writeln('<error>There was something wrong with the nginx config! Reverting changes.</error>');
+            $this->output->writeln("Debug: {$configTest}");
+
+            $this->rollbackChanges();
+        }
+    }
+
+    /**
      * Run the nginx reload command.
      *
      * If this fails we will roll back config changes.
      */
     public function reload()
     {
-        $restartNginx = system('service nginx reload');
+        $restartNginx = system('sudo service nginx reload');
 
         // Normally nginx reload has no output unless there is an error.
         if ($restartNginx) {
@@ -142,25 +161,6 @@ class Nginx {
             $this->output->writeln("Debug: {$restartNginx}");
 
             // There was a problem with the config so remove our changes.
-            $this->rollbackChanges();
-        }
-    }
-
-    /**
-     * Create a symlink between the sites-available and sites-enabled config so that Nginx will see the config file.
-     */
-    public function enableConfig()
-    {
-        try {
-            // Create the symlink
-            $symLink = $this->fileSystem->symlink(
-                $this->paths['nginx']['config'],
-                $this->paths['nginx']['symlink']
-            );
-        } catch (IOExceptionInterface $exception) {
-            $this->output->writeln('<error>There was an error creating the symlink from sites-available to sites-enabled</error>');
-
-            // There was a problem with the config symlink so remove our changes.
             $this->rollbackChanges();
         }
     }
