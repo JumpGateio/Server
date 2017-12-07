@@ -73,6 +73,9 @@ class NewSiteCommand extends Command {
         // With is to make sure we don't break the nginx config
         $this->validateDomainName($domain);
 
+        // Setup filesystem
+        $this->fileSystem = new Filesystem();
+
         // Build up all the paths we will need to create a new site
         $this->buildPaths($domain);
 
@@ -81,9 +84,6 @@ class NewSiteCommand extends Command {
 
         // Setup Nginx
         $nginx = new Nginx($this->paths, $domain, $this->output);
-
-        // Setup filesystem
-        $this->fileSystem = new Filesystem();
 
         // Run config test first to make sure the system is not broken to begin with.
         $nginx->configTest();
@@ -178,7 +178,7 @@ class NewSiteCommand extends Command {
      */
     private function findOrCreateDirectory($path, $createDirectory = true)
     {
-        if (!$this->fileSystem->is_dir($path)) {
+        if (!$this->fileSystem->exists($path)) {
             if ($createDirectory) {
                 $this->output->writeln("<info>Folder not found. Attempting to create: {$path}</info>");
 
